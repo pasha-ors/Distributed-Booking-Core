@@ -1,7 +1,9 @@
 package com.booking.payment.repository;
 
 import com.booking.payment.entity.Payment;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
@@ -23,4 +25,8 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
         FOR UPDATE SKIP LOCKED
     """, nativeQuery = true)
     List<Payment> findPaymentsForRetry();
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM Payment p WHERE p.id = :id")
+    Optional<Payment> findByIdForUpdate(Long id);
 }

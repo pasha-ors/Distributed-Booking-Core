@@ -4,6 +4,7 @@ import com.booking.payment.entity.Payment;
 import com.booking.payment.entity.PaymentStatus;
 import com.booking.payment.provider.PaymentProviderClient;
 import com.booking.payment.repository.PaymentRepository;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -24,9 +25,16 @@ public class PaymentAsyncService {
     private static final Duration MAX_DURATION = Duration.ofMinutes(10);
 
     @Async
+    @Transactional
     public void processPaymentAsync(Long paymentId){
 
-        Payment payment = paymentRepository.findById(paymentId).orElseThrow();
+        Payment payment = paymentRepository
+                .findByIdForUpdate(paymentId)
+                .orElseThrow();
+
+        if (payment.getStatus() != PaymentStatus.PROCESSING) {
+            return;
+        }
 
         try {
             var response = paymentProviderClient.charge(payment);

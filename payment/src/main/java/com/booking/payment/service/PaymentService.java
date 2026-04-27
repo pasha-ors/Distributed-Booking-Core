@@ -1,14 +1,14 @@
 package com.booking.payment.service;
 
-import com.booking.payment.dto.PaymentProviderResponse;
 import com.booking.payment.dto.PaymentRequest;
 import com.booking.payment.dto.PaymentResponse;
 import com.booking.payment.entity.Payment;
 import com.booking.payment.entity.PaymentStatus;
-import com.booking.payment.provider.PaymentProviderClient;
+import com.booking.payment.event.PaymentCreatedEvent;
 import com.booking.payment.repository.PaymentRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
@@ -17,7 +17,7 @@ import org.springframework.stereotype.Service;
 public class PaymentService {
 
     private final PaymentRepository paymentRepository;
-    private final PaymentAsyncService paymentAsyncService;
+    private final ApplicationEventPublisher publisher;
 
     @Transactional
     private Payment createPayment(PaymentRequest request, String key) {
@@ -42,14 +42,16 @@ public class PaymentService {
         }
 
         payment.setStatus(PaymentStatus.PROCESSING); // UPDATE PROCESSING
-        return paymentRepository.save(payment);
+        payment = paymentRepository.save(payment);
+
+        publisher.publishEvent(new PaymentCreatedEvent(payment.getId()));
+
+        return payment;
     }
 
     public PaymentResponse processPayment(PaymentRequest request, String key) {
 
         Payment payment = createPayment(request, key);
-
-        paymentAsyncService.processPaymentAsync(payment.getId());
 
         return mapToResponse(payment);
     }
