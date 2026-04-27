@@ -9,6 +9,7 @@ import com.booking.payment.provider.PaymentProviderClient;
 import com.booking.payment.repository.PaymentRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -16,39 +17,46 @@ import org.springframework.stereotype.Service;
 public class PaymentService {
 
     private final PaymentRepository paymentRepository;
-    private final PaymentProviderClient paymentProviderClient;
+    private final PaymentAsyncService paymentAsyncService;
 
     @Transactional
-    public PaymentResponse processPayment(PaymentRequest request) {
-        Payment payment = new Payment();
+    private Payment createPayment(PaymentRequest request, String key) {
 
+        var existing = paymentRepository.findByIdempotencyKey(key);
+
+        if(existing.isPresent()) {
+            return existing.get();
+        }
+
+        Payment payment = new Payment();
         payment.setOrderId(request.orderId());
         payment.setAmount(request.amount());
         payment.setCurrency(request.currency());
-
-        payment = paymentRepository.save(payment);
-
-        payment.setStatus(PaymentStatus.PROCESSING);
-
-        paymentRepository.save(payment);
+        payment.setIdempotencyKey(key);
 
         try {
-            PaymentProviderResponse response = paymentProviderClient.charge(payment);
-
-            if (response.success()) {
-                payment.setStatus(PaymentStatus.SUCCESS);
-                payment.setExternalId(response.externalId());
-            } else {
-                payment.setStatus(PaymentStatus.FAILED);
-                payment.setFailureReason(response.errorMessage());
-            }
-
-        }catch (Exception ex){
-            payment.setStatus(PaymentStatus.FAILED);
-            payment.setFailureReason(ex.getMessage());
+            payment = paymentRepository.save(payment); // INSERT INIT
+        }catch(DataIntegrityViolationException ex) {
+            return paymentRepository.findByIdempotencyKey(key)
+                    .orElseThrow();
         }
 
-        payment = paymentRepository.save(payment);
+        payment.setStatus(PaymentStatus.PROCESSING); // UPDATE PROCESSING
+        return paymentRepository.save(payment);
+    }
+
+    public PaymentResponse processPayment(PaymentRequest request, String key) {
+
+        Payment payment = createPayment(request, key);
+
+        paymentAsyncService.processPaymentAsync(payment.getId());
+
+        return mapToResponse(payment);
+    }
+
+    public PaymentResponse getPayment(Long id){
+        Payment payment = paymentRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Payment not found"));
 
         return mapToResponse(payment);
     }

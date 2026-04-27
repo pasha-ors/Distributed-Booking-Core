@@ -2,9 +2,11 @@ package com.booking.payment.provider;
 
 import com.booking.payment.dto.PaymentProviderResponse;
 import com.booking.payment.entity.Payment;
+import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
+@Component
 public class FakePaymentProviderClient implements PaymentProviderClient {
 
     @Override

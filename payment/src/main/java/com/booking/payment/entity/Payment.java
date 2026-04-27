@@ -7,10 +7,14 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Entity
-@Table(name = "payments")
+@Table(name = "payments",
+        indexes = {
+                @Index(name = "idx_retry", columnList = "status, nextRetryAt"),
+                @Index(name = "idx_idempotency", columnList = "idempotency_key")
+        }
+)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -37,7 +41,7 @@ public class Payment {
     private String externalId;
 
     // to avoid double-posting
-    @Column(nullable = false, unique = true)
+    @Column(name = "idempotency_key", nullable = false, unique = true)
     private String idempotencyKey;
 
     @Column(nullable = false)
@@ -47,11 +51,17 @@ public class Payment {
 
     private String failureReason;
 
+    @Column(nullable = false)
+    private int retryCount;
+
+    private LocalDateTime nextRetryAt;
+
     @PrePersist
     public void prePersist() {
         this.createdAt = LocalDateTime.now();
-        this.idempotencyKey = UUID.randomUUID().toString();
-        this.status = PaymentStatus.INIT;
+        if (this.status == null) {
+            this.status = PaymentStatus.INIT;
+        }
     }
 
     @PreUpdate
